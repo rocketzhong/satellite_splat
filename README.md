@@ -16,5 +16,5 @@ This repository is the official implements of "satellite_splat". "https://arxiv.
 
 To train with it, run the command:
 ```
-ns-train satellite_splat --data [PATH]
+ns-train satellite-splat --data [PATH]
 ```
