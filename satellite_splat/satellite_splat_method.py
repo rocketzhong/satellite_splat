@@ -7,14 +7,14 @@ Define your custom method here that registers with Nerfstudio CLI.
 from __future__ import annotations
 
 from satellite_splat.satellite_splat_datamanager import (
-    TemplateDataManagerConfig,
+    SatelliteSplatDataManangerConfig,
 )
 from satellite_splat.satellite_splat_model import SatelliteSplatModelConfig
 from satellite_splat.satellite_splat_pipeline import (
     TemplatePipelineConfig,
 )
 from nerfstudio.configs.base_config import ViewerConfig
-from nerfstudio.data.dataparsers.blender_dataparser import BlenderDataParserConfig
+from satellite_splat.satellite_splat_dataparser import SatelliteDataParserConfig
 from nerfstudio.engine.optimizers import AdamOptimizerConfig, RAdamOptimizerConfig
 from nerfstudio.engine.schedulers import (
     ExponentialDecaySchedulerConfig,
@@ -31,10 +31,8 @@ satellite_splat = MethodSpecification(
         max_num_iterations=30000,
         mixed_precision=True,
         pipeline=TemplatePipelineConfig(
-            datamanager=TemplateDataManagerConfig(
-                dataparser=BlenderDataParserConfig(),
-                train_num_rays_per_batch=4096,
-                eval_num_rays_per_batch=4096,
+            datamanager=SatelliteSplatDataManangerConfig(
+                dataparser=SatelliteDataParserConfig()
             ),
             model=SatelliteSplatModelConfig(
                 eval_num_rays_per_chunk=1 << 15

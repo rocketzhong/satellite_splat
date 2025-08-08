@@ -10,7 +10,7 @@ import torch.distributed as dist
 from torch.cuda.amp.grad_scaler import GradScaler
 from torch.nn.parallel import DistributedDataParallel as DDP
 
-from satellite_splat.satellite_splat_datamanager import TemplateDataManagerConfig
+from satellite_splat.satellite_splat_datamanager import SatelliteSplatDataManangerConfig
 from satellite_splat.satellite_splat_model import SatelliteSplatModel, SatelliteSplatModelConfig
 from nerfstudio.data.datamanagers.base_datamanager import (
     DataManager,
@@ -29,7 +29,7 @@ class TemplatePipelineConfig(VanillaPipelineConfig):
 
     _target: Type = field(default_factory=lambda: TemplatePipeline)
     """target class to instantiate"""
-    datamanager: DataManagerConfig = TemplateDataManagerConfig()
+    datamanager: DataManagerConfig = SatelliteSplatDataManangerConfig()
     """specifies the datamanager config"""
     model: ModelConfig = SatelliteSplatModelConfig()
     """specifies the model config"""
@@ -75,3 +75,17 @@ class TemplatePipeline(VanillaPipeline):
                 SatelliteSplatModel, DDP(self._model, device_ids=[local_rank], find_unused_parameters=True)
             )
             dist.barrier(device_ids=[local_rank])
+    def get_train_loss_dict(self, step: int):
+        """This function gets your training loss dict. This will be responsible for
+        getting the next batch of data from the DataManager and interfacing with the
+        Model class, feeding the data to the model's forward function.
+
+        Args:
+            step: current iteration step to update sampler if using DDP (distributed)
+        """
+        ray_bundle, batch = self.datamanager.next_train(step)
+        model_outputs = self._model(ray_bundle)  # train distributed data parallel model if world_size > 1
+        metrics_dict = self.model.get_metrics_dict(model_outputs, batch)
+        loss_dict = self.model.get_loss_dict(model_outputs, batch, metrics_dict)
+
+        return model_outputs, loss_dict, metrics_dict

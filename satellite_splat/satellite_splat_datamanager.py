@@ -8,34 +8,34 @@ from typing import Dict, Literal, Tuple, Type, Union
 import torch
 
 from nerfstudio.cameras.rays import RayBundle
-from nerfstudio.data.datamanagers.base_datamanager import (
-    VanillaDataManager,
-    VanillaDataManagerConfig,
+from nerfstudio.data.datamanagers.full_images_datamanager import (
+    FullImageDatamanager,
+    FullImageDatamanagerConfig,
 )
 
 
 @dataclass
-class TemplateDataManagerConfig(VanillaDataManagerConfig):
+class SatelliteSplatDataManangerConfig(FullImageDatamanagerConfig):
     """Template DataManager Config
 
     Add your custom datamanager config parameters here.
     """
 
-    _target: Type = field(default_factory=lambda: TemplateDataManager)
+    _target: Type = field(default_factory=lambda: SatelliteSplatDataManager)
 
 
-class TemplateDataManager(VanillaDataManager):
+class SatelliteSplatDataManager(FullImageDatamanager):
     """Template DataManager
 
     Args:
         config: the DataManagerConfig used to instantiate class
     """
 
-    config: TemplateDataManagerConfig
+    config: SatelliteSplatDataManangerConfig
 
     def __init__(
         self,
-        config: TemplateDataManagerConfig,
+        config: SatelliteSplatDataManangerConfig,
         device: Union[torch.device, str] = "cpu",
         test_mode: Literal["test", "val", "inference"] = "val",
         world_size: int = 1,
@@ -45,14 +45,3 @@ class TemplateDataManager(VanillaDataManager):
         super().__init__(
             config=config, device=device, test_mode=test_mode, world_size=world_size, local_rank=local_rank, **kwargs
         )
-
-    def next_train(self, step: int) -> Tuple[RayBundle, Dict]:
-        """Returns the next batch of data from the train dataloader."""
-        self.train_count += 1
-        image_batch = next(self.iter_train_image_dataloader)
-        assert self.train_pixel_sampler is not None
-        assert isinstance(image_batch, dict)
-        batch = self.train_pixel_sampler.sample(image_batch)
-        ray_indices = batch["indices"]
-        ray_bundle = self.train_ray_generator(ray_indices)
-        return ray_bundle, batch

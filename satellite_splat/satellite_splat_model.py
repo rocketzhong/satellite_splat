@@ -8,7 +8,9 @@ from nerfstudio.cameras.camera_optimizers import CameraOptimizer, CameraOptimize
 from nerfstudio.cameras.cameras import Cameras
 from typing import Dict, List, Literal, Optional, Tuple, Type, Union
 import torch
-from nerfstudio.models.splatfacto import SplatfactoModelConfig, SplatfactoModel,get_viewmat  # for subclassing Nerfacto model
+
+# for subclassing Nerfacto model
+from nerfstudio.models.splatfacto import SplatfactoModelConfig, SplatfactoModel, get_viewmat,total_variation_loss,color_correct
 
 try:
     from gsplat.rendering import rasterization
@@ -36,7 +38,76 @@ class SatelliteSplatModel(SplatfactoModel):
     # TODO: Override any potential functions/methods to implement your own method
     # or subclass from "Model" and define all mandatory fields.
 
+    # def get_metrics_dict(self, outputs, batch) -> Dict[str, torch.Tensor]:
+    def get_metrics_dict(self, outputs, batch) -> Dict[str, torch.Tensor]:
+        """Compute and returns metrics.
 
+        Args:
+            outputs: the output to compute loss dict to
+            batch: ground truth batch corresponding to outputs
+        """
+        gt_rgb = self.composite_with_background(self.get_gt_img(batch["image"]), outputs["background"])
+        metrics_dict = {}
+        predicted_rgb = outputs["rgb"]
+
+        metrics_dict["psnr"] = self.psnr(predicted_rgb, gt_rgb)
+        if self.config.color_corrected_metrics:
+            cc_rgb = color_correct(predicted_rgb, gt_rgb)
+            metrics_dict["cc_psnr"] = self.psnr(cc_rgb, gt_rgb)
+
+        metrics_dict["gaussian_count"] = self.num_points
+
+        self.camera_optimizer.get_metrics_dict(metrics_dict)
+        return metrics_dict
+
+    def get_loss_dict(self, outputs, batch, metrics_dict=None) -> Dict[str, torch.Tensor]:
+        """Computes and returns the losses dict.
+
+        Args:
+            outputs: the output to compute loss dict to
+            batch: ground truth batch corresponding to outputs
+            metrics_dict: dictionary of metrics, some of which we can use for loss
+        """
+        gt_img = self.composite_with_background(self.get_gt_img(batch["image"]), outputs["background"])
+        pred_img = outputs["rgb"]
+
+        # Set masked part of both ground-truth and rendered image to black.
+        # This is a little bit sketchy for the SSIM loss.
+        if "mask" in batch:
+            # batch["mask"] : [H, W, 1]
+            mask = self._downscale_if_required(batch["mask"])
+            mask = mask.to(self.device)
+            assert mask.shape[:2] == gt_img.shape[:2] == pred_img.shape[:2]
+            gt_img = gt_img * mask
+            pred_img = pred_img * mask
+
+        Ll1 = torch.abs(gt_img - pred_img).mean()
+        simloss = 1 - self.ssim(gt_img.permute(2, 0, 1)[None, ...], pred_img.permute(2, 0, 1)[None, ...])
+        if self.config.use_scale_regularization and self.step % 10 == 0:
+            scale_exp = torch.exp(self.scales)
+            scale_reg = (
+                torch.maximum(
+                    scale_exp.amax(dim=-1) / scale_exp.amin(dim=-1),
+                    torch.tensor(self.config.max_gauss_ratio),
+                )
+                - self.config.max_gauss_ratio
+            )
+            scale_reg = 0.1 * scale_reg.mean()
+        else:
+            scale_reg = torch.tensor(0.0).to(self.device)
+
+        loss_dict = {
+            "main_loss": (1 - self.config.ssim_lambda) * Ll1 + self.config.ssim_lambda * simloss,
+            "scale_reg": scale_reg,
+        }
+
+        if self.training:
+            # Add loss from camera optimizer
+            self.camera_optimizer.get_loss_dict(loss_dict)
+            if self.config.use_bilateral_grid:
+                loss_dict["tv_loss"] = 10 * total_variation_loss(self.bil_grids.grids)
+
+        return loss_dict
 
     def get_outputs(self, camera: Cameras) -> Dict[str, Union[torch.Tensor, List]]:
         """Takes in a camera and returns a dictionary of outputs.
@@ -53,8 +124,7 @@ class SatelliteSplatModel(SplatfactoModel):
             Outputs of model. (ie. rendered colors)
         """
         if not isinstance(camera, Cameras):
-            print("Called get_outputs with not a camera")
-            return {}
+            raise TypeError("Called get_outputs with not a camera")
 
         if self.training:
             assert camera.shape[0] == 1, "Only one camera at a time"
