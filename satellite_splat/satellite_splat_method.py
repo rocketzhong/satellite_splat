@@ -32,11 +32,14 @@ satellite_splat = MethodSpecification(
         mixed_precision=True,
         pipeline=SatelliteSplatPipelineConfig(
             datamanager=SatelliteSplatDataManangerConfig(
-                dataparser=SatelliteDataParserConfig()
+                dataparser=SatelliteDataParserConfig(
+                    alpha_color='white'
+                )
             ),
             model=SatelliteSplatModelConfig(
                 eval_num_rays_per_chunk=1 << 15,
-                background_color="black"
+                background_color="black",
+                random_init=False
             ),
         ),
         optimizers={

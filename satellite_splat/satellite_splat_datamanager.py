@@ -7,7 +7,6 @@ from typing import Dict, Literal, Tuple, Type, Union
 
 import torch
 
-from nerfstudio.cameras.rays import RayBundle
 from nerfstudio.data.datamanagers.full_images_datamanager import (
     FullImageDatamanager,
     FullImageDatamanagerConfig,
