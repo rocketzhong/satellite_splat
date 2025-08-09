@@ -11,7 +11,7 @@ from satellite_splat.satellite_splat_datamanager import (
 )
 from satellite_splat.satellite_splat_model import SatelliteSplatModelConfig
 from satellite_splat.satellite_splat_pipeline import (
-    TemplatePipelineConfig,
+    SatelliteSplatPipelineConfig,
 )
 from nerfstudio.configs.base_config import ViewerConfig
 from satellite_splat.satellite_splat_dataparser import SatelliteDataParserConfig
@@ -30,12 +30,13 @@ satellite_splat = MethodSpecification(
         steps_per_save=2000,
         max_num_iterations=30000,
         mixed_precision=True,
-        pipeline=TemplatePipelineConfig(
+        pipeline=SatelliteSplatPipelineConfig(
             datamanager=SatelliteSplatDataManangerConfig(
                 dataparser=SatelliteDataParserConfig()
             ),
             model=SatelliteSplatModelConfig(
-                eval_num_rays_per_chunk=1 << 15
+                eval_num_rays_per_chunk=1 << 15,
+                background_color="black"
             ),
         ),
         optimizers={

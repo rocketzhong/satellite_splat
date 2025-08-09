@@ -1,5 +1,5 @@
 """
-Nerfstudio Template Pipeline
+Satellite Splat Pipeline
 """
 
 import typing
@@ -24,10 +24,10 @@ from nerfstudio.pipelines.base_pipeline import (
 
 
 @dataclass
-class TemplatePipelineConfig(VanillaPipelineConfig):
+class SatelliteSplatPipelineConfig(VanillaPipelineConfig):
     """Configuration for pipeline instantiation"""
 
-    _target: Type = field(default_factory=lambda: TemplatePipeline)
+    _target: Type = field(default_factory=lambda: SatelliteSplatPipeline)
     """target class to instantiate"""
     datamanager: DataManagerConfig = SatelliteSplatDataManangerConfig()
     """specifies the datamanager config"""
@@ -35,7 +35,7 @@ class TemplatePipelineConfig(VanillaPipelineConfig):
     """specifies the model config"""
 
 
-class TemplatePipeline(VanillaPipeline):
+class SatelliteSplatPipeline(VanillaPipeline):
     """Template Pipeline
 
     Args:
@@ -44,7 +44,7 @@ class TemplatePipeline(VanillaPipeline):
 
     def __init__(
         self,
-        config: TemplatePipelineConfig,
+        config: SatelliteSplatPipelineConfig,
         device: str,
         test_mode: Literal["test", "val", "inference"] = "val",
         world_size: int = 1,
@@ -75,6 +75,7 @@ class TemplatePipeline(VanillaPipeline):
                 SatelliteSplatModel, DDP(self._model, device_ids=[local_rank], find_unused_parameters=True)
             )
             dist.barrier(device_ids=[local_rank])
+
     def get_train_loss_dict(self, step: int):
         """This function gets your training loss dict. This will be responsible for
         getting the next batch of data from the DataManager and interfacing with the
@@ -83,8 +84,8 @@ class TemplatePipeline(VanillaPipeline):
         Args:
             step: current iteration step to update sampler if using DDP (distributed)
         """
-        ray_bundle, batch = self.datamanager.next_train(step)
-        model_outputs = self._model(ray_bundle)  # train distributed data parallel model if world_size > 1
+        cameras, batch = self.datamanager.next_train(step)
+        model_outputs = self._model(cameras)  # train distributed data parallel model if world_size > 1
         metrics_dict = self.model.get_metrics_dict(model_outputs, batch)
         loss_dict = self.model.get_loss_dict(model_outputs, batch, metrics_dict)
 
