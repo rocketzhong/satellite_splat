@@ -19,21 +19,21 @@ from nerfstudio.engine.optimizers import AdamOptimizerConfig, RAdamOptimizerConf
 from nerfstudio.engine.schedulers import (
     ExponentialDecaySchedulerConfig,
 )
-from nerfstudio.engine.trainer import TrainerConfig
+from satellite_splat.satellite_splat_trainer import SatelliteSplatTrainerConfig
 from nerfstudio.plugins.types import MethodSpecification
 
-
+max_steps = 3000
 satellite_splat = MethodSpecification(
-    config=TrainerConfig(
+    config=SatelliteSplatTrainerConfig(
         method_name="satellite-splat",  # TODO: rename to your own model
         steps_per_eval_batch=500,
         steps_per_save=2000,
-        max_num_iterations=30000,
+        max_num_iterations=max_steps,
         mixed_precision=True,
         pipeline=SatelliteSplatPipelineConfig(
             datamanager=SatelliteSplatDataManangerConfig(
                 dataparser=SatelliteDataParserConfig(
-                    alpha_color='white'
+                    alpha_color='black'
                 )
             ),
             model=SatelliteSplatModelConfig(
@@ -48,7 +48,7 @@ satellite_splat = MethodSpecification(
                 "optimizer": AdamOptimizerConfig(lr=1.6e-4, eps=1e-15),
                 "scheduler": ExponentialDecaySchedulerConfig(
                     lr_final=1.6e-6,
-                    max_steps=30000,
+                    max_steps=max_steps,
                 ),
             },
             "features_dc": {
@@ -77,7 +77,7 @@ satellite_splat = MethodSpecification(
             },
         },
         viewer=ViewerConfig(num_rays_per_chunk=1 << 15),
-        vis="viewer",
+        vis="viewer_legacy",
     ),
     description="Satellite Splat following Nerfstudio method template.",
 )

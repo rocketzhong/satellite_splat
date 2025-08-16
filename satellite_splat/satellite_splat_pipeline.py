@@ -36,7 +36,7 @@ class SatelliteSplatPipelineConfig(VanillaPipelineConfig):
 
 
 class SatelliteSplatPipeline(VanillaPipeline):
-    """Template Pipeline
+    """Satellite Splat Pipeline
 
     Args:
         config: the pipeline config used to instantiate class
