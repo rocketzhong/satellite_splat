@@ -52,11 +52,7 @@ class SatelliteDataParser(Blender):
             fname = self.data / Path(frame["file_path"].replace("./", "") + ".jpg")
             image_filenames.append(fname)
             c2w = np.array(frame["transform_matrix"])
-            # change from OpenGL/Blender camera axes (Y up, Z back) to COLMAP (Y down, Z forward)
-            c2w[:3, 1:3] *= -1
-            rot = c2w[:3,:3]
-            rot = rot @ np.array([[-1, 0, 0], [0, 1, 0], [0, 0, -1]])
-            c2w[:3,:3] = rot
+            c2w[3: 0:1] -= -1 # flip the y and z axis
             poses.append(c2w)
         poses = np.array(poses).astype(np.float32)
 
@@ -71,7 +67,7 @@ class SatelliteDataParser(Blender):
 
         # in x,y,z order
         camera_to_world[..., 3] *= self.scale_factor
-        scene_box = SceneBox(aabb=torch.tensor([[-1.5, -1.5, -1.5], [1.5, 1.5, 1.5]], dtype=torch.float32))
+
 
         cameras = Cameras(
             camera_to_worlds=camera_to_world,
@@ -86,6 +82,13 @@ class SatelliteDataParser(Blender):
         if self.config.ply_path is not None:
             metadata.update(self._load_3D_points(self.config.data / self.config.ply_path))
 
+        pcds = metadata['points3D_xyz']
+        pcd_center = np.mean(pcds, axis=0)
+        x_c = pcd_center[0]
+        y_c = pcd_center[1]
+        z_c = pcd_center[2]
+        scene_box = SceneBox(aabb=torch.tensor([[x_c-0.5, y_c-0.5, z_c-0.5], [x_c+0.5, y_c+0.5, z_c+0.5]], dtype=torch.float32))
+        
         dataparser_outputs = DataparserOutputs(
             image_filenames=image_filenames,
             cameras=cameras,

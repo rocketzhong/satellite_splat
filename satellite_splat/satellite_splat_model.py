@@ -11,6 +11,7 @@ import torch
 
 # for subclassing Nerfacto model
 from nerfstudio.models.splatfacto import SplatfactoModelConfig, SplatfactoModel, get_viewmat,total_variation_loss,color_correct
+from gsplat.strategy import DefaultStrategy,MCMCStrategy
 
 try:
     from gsplat.rendering import rasterization
@@ -25,6 +26,11 @@ class SatelliteSplatModelConfig(SplatfactoModelConfig):
     """
 
     _target: Type = field(default_factory=lambda: SatelliteSplatModel)
+    resolution_schedule: int = 500
+    densify_grad_thresh: float = 0.0001
+    refine_every: int = 500
+    stop_split_at: int = 10000
+    output_depth_during_training:int = True
 
 
 class SatelliteSplatModel(SplatfactoModel):
@@ -34,6 +40,25 @@ class SatelliteSplatModel(SplatfactoModel):
 
     def populate_modules(self):
         super().populate_modules()
+        # Strategy for GS densification
+        self.strategy = DefaultStrategy(
+            prune_opa=self.config.cull_alpha_thresh,
+            grow_grad2d=self.config.densify_grad_thresh,
+            grow_scale3d=self.config.densify_size_thresh,
+            grow_scale2d=self.config.split_screen_size,
+            prune_scale3d=self.config.cull_scale_thresh,
+            prune_scale2d=self.config.cull_screen_size,
+            refine_scale2d_stop_iter=self.config.stop_screen_size_at,
+            refine_start_iter=self.config.warmup_length,
+            refine_stop_iter=self.config.stop_split_at,
+            reset_every=self.config.reset_alpha_every * self.config.refine_every,
+            refine_every=self.config.refine_every,
+            pause_refine_after_reset=self.num_train_data + self.config.refine_every,
+            absgrad=self.config.use_absgrad,
+            revised_opacity=False,
+            verbose=True,
+        )
+        self.strategy_state = self.strategy.initialize_state(scene_scale=1.0)
 
     # TODO: Override any potential functions/methods to implement your own method
     # or subclass from "Model" and define all mandatory fields.
@@ -70,18 +95,26 @@ class SatelliteSplatModel(SplatfactoModel):
         """
         gt_img = self.composite_with_background(self.get_gt_img(batch["image"]), outputs["background"])
         pred_img = outputs["rgb"]
-
+        pred_accumulation = outputs["accumulation"]
+        pred_depth = outputs["depth"]
         # Set masked part of both ground-truth and rendered image to black.
         # This is a little bit sketchy for the SSIM loss.
 
-        mask = gt_img > 0
-        mask = mask.to(self.device)
-        assert mask.shape[:2] == gt_img.shape[:2] == pred_img.shape[:2]
+        mask = gt_img > 0.005
+        mask = mask.to(self.device)[0]
+        mask_not = torch.logical_not(mask)
         gt_img *= mask
         pred_img *= mask
 
         Ll1 = torch.abs(gt_img - pred_img).mean()
         simloss = 1 - self.ssim(gt_img.permute(2, 0, 1)[None, ...], pred_img.permute(2, 0, 1)[None, ...])
+
+        if self.step > 5000:
+            loss_transparent = (pred_accumulation * mask_not).mean()
+            loss_transparent *= (0.5 * min(1.0,(self.step-5000) / 1000))
+        else:
+            loss_transparent = 0
+        loss_depth = - (mask_not * pred_depth).mean() * 0
         if self.config.use_scale_regularization and self.step % 10 == 0:
             scale_exp = torch.exp(self.scales)
             scale_reg = (
@@ -96,7 +129,7 @@ class SatelliteSplatModel(SplatfactoModel):
             scale_reg = torch.tensor(0.0).to(self.device)
 
         loss_dict = {
-            "main_loss": (1 - self.config.ssim_lambda) * Ll1 + self.config.ssim_lambda * simloss,
+            "main_loss": (1 - self.config.ssim_lambda) * Ll1 + self.config.ssim_lambda * simloss + loss_transparent + loss_depth,
             "scale_reg": scale_reg,
         }
 

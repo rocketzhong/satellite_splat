@@ -22,7 +22,7 @@ from nerfstudio.engine.schedulers import (
 from satellite_splat.satellite_splat_trainer import SatelliteSplatTrainerConfig
 from nerfstudio.plugins.types import MethodSpecification
 
-max_steps = 3000
+max_steps = 30000
 satellite_splat = MethodSpecification(
     config=SatelliteSplatTrainerConfig(
         method_name="satellite-splat",  # TODO: rename to your own model
@@ -33,13 +33,12 @@ satellite_splat = MethodSpecification(
         pipeline=SatelliteSplatPipelineConfig(
             datamanager=SatelliteSplatDataManangerConfig(
                 dataparser=SatelliteDataParserConfig(
-                    alpha_color='black'
+                    alpha_color="black"
                 )
             ),
             model=SatelliteSplatModelConfig(
                 eval_num_rays_per_chunk=1 << 15,
                 background_color="black",
-                random_init=False
             ),
         ),
         optimizers={
@@ -76,7 +75,10 @@ satellite_splat = MethodSpecification(
                 "scheduler": ExponentialDecaySchedulerConfig(lr_final=1e-4, max_steps=5000),
             },
         },
-        viewer=ViewerConfig(num_rays_per_chunk=1 << 15),
+        viewer=ViewerConfig(
+            num_rays_per_chunk=1 << 15,
+            websocket_port=7007
+        ),
         vis="viewer_legacy",
     ),
     description="Satellite Splat following Nerfstudio method template.",
