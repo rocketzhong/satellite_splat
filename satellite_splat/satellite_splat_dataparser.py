@@ -53,7 +53,10 @@ class SatelliteDataParser(Blender):
             image_filenames.append(fname)
             c2w = np.array(frame["transform_matrix"])
             # change from OpenGL/Blender camera axes (Y up, Z back) to COLMAP (Y down, Z forward)
-
+            c2w[:3, 1:3] *= -1
+            rot = c2w[:3,:3]
+            rot = rot @ np.array([[-1, 0, 0], [0, 1, 0], [0, 0, -1]])
+            c2w[:3,:3] = rot
             poses.append(c2w)
         poses = np.array(poses).astype(np.float32)
 
