@@ -9,6 +9,8 @@ from nerfstudio.cameras.cameras import Cameras
 from typing import Dict, List, Literal, Optional, Tuple, Type, Union
 import torch
 
+from satellite_splat.effective_rank import get_effective_rank, get_ordered_scale_multiple
+
 # for subclassing Nerfacto model
 from nerfstudio.models.splatfacto import SplatfactoModelConfig, SplatfactoModel, get_viewmat, total_variation_loss, \
     color_correct
@@ -29,10 +31,13 @@ class SatelliteSplatModelConfig(SplatfactoModelConfig):
 
     _target: Type = field(default_factory=lambda: SatelliteSplatModel)
     resolution_schedule: int = 500
-    densify_grad_thresh: float = 0.0001
+    densify_grad_thresh: float = 0.0002
     refine_every: int = 500
     stop_split_at: int = 10000
     output_depth_during_training: int = True
+    cull_alpha_thresh: int = 0.005
+    reset_alpha_every: int = 10000
+    split_screen_size: int = 0.01
 
 
 class SatelliteSplatModel(SplatfactoModel):
@@ -126,7 +131,7 @@ class SatelliteSplatModel(SplatfactoModel):
             loss_transparent *= 0.5
         else:
             loss_transparent = 0
-        loss_depth = - (mask_not * pred_depth).mean() * 0
+        # loss_depth = - (mask_not * pred_depth).mean() * 0
         if self.config.use_scale_regularization and self.step % 10 == 0:
             scale_exp = torch.exp(self.scales)
             scale_reg = (
@@ -140,9 +145,14 @@ class SatelliteSplatModel(SplatfactoModel):
         else:
             scale_reg = torch.tensor(0.0).to(self.device)
 
+        ordered_scale_multiple, ordered_scale = get_ordered_scale_multiple(self.scales)
+
+        erank = get_effective_rank(self.scales)
+        erank_loss = 0.01 * torch.clamp(-torch.log(erank - 1 + 1e-7), 0).mean()
+        # thin_loss = ordered_scale[:, 2].mean()
         loss_dict = {
             "main_loss": (
-                                 1 - self.config.ssim_lambda) * Ll1 + self.config.ssim_lambda * simloss + loss_transparent + loss_depth,
+                                 1 - self.config.ssim_lambda) * Ll1 + self.config.ssim_lambda * simloss + loss_transparent + erank_loss,
             "scale_reg": scale_reg,
         }
 
