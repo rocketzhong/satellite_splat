@@ -9,7 +9,7 @@ import numpy as np
 import torch
 
 from nerfstudio.cameras.cameras import Cameras, CameraType
-from nerfstudio.data.dataparsers.blender_dataparser import BlenderDataParserConfig,Blender
+from nerfstudio.data.dataparsers.blender_dataparser import BlenderDataParserConfig, Blender
 from nerfstudio.data.scene_box import SceneBox
 from nerfstudio.data.dataparsers.base_dataparser import DataparserOutputs
 from nerfstudio.utils.io import load_from_json
@@ -52,7 +52,7 @@ class SatelliteDataParser(Blender):
             fname = self.data / Path(frame["file_path"].replace("./", "") + ".jpg")
             image_filenames.append(fname)
             c2w = np.array(frame["transform_matrix"])
-            c2w[3: 0:1] -= -1 # flip the y and z axis
+            c2w[3: 0:1] -= -1  # flip the y and z axis
             poses.append(c2w)
         poses = np.array(poses).astype(np.float32)
 
@@ -68,7 +68,6 @@ class SatelliteDataParser(Blender):
         # in x,y,z order
         camera_to_world[..., 3] *= self.scale_factor
 
-
         cameras = Cameras(
             camera_to_worlds=camera_to_world,
             fx=focal_length,
@@ -83,12 +82,20 @@ class SatelliteDataParser(Blender):
             metadata.update(self._load_3D_points(self.config.data / self.config.ply_path))
 
         pcds = metadata['points3D_xyz']
-        pcd_center = np.mean(pcds, axis=0)
-        x_c = pcd_center[0]
-        y_c = pcd_center[1]
-        z_c = pcd_center[2]
-        scene_box = SceneBox(aabb=torch.tensor([[x_c-0.5, y_c-0.5, z_c-0.5], [x_c+0.5, y_c+0.5, z_c+0.5]], dtype=torch.float32))
-        
+        min_xyz, _ = torch.min(pcds, dim=0)
+        max_xyz, _ = torch.max(pcds, dim=0)
+        pcd_center = (min_xyz + max_xyz) / 2
+        x_c = pcd_center[0].item()
+        y_c = pcd_center[1].item()
+        z_c = pcd_center[2].item()
+        distances = torch.norm(pcds - pcd_center, dim=-1)
+        max_dist, max_idx = torch.max(distances, dim=0)
+        max_range = (max_dist * 1.5).item()
+        scene_box = SceneBox(aabb=torch.tensor(
+            [[x_c - max_range, y_c - max_range, z_c - max_range],
+             [x_c + max_range, y_c + max_range, z_c + max_range]],
+            dtype=torch.float32, device=torch.device(0)))
+        # scene_box.aabb = scene_box.aabb.to(self.device)
         dataparser_outputs = DataparserOutputs(
             image_filenames=image_filenames,
             cameras=cameras,
@@ -103,7 +110,7 @@ class SatelliteDataParser(Blender):
     def _load_3D_points(self, ply_file_path: Path):
         import open3d as o3d  # Importing open3d is slow, so we only do it if we need it.
 
-        #check if exist
+        # check if exist
         if ply_file_path.exists():
             full_ply_file_path = ply_file_path
         else:

@@ -10,13 +10,15 @@ from typing import Dict, List, Literal, Optional, Tuple, Type, Union
 import torch
 
 # for subclassing Nerfacto model
-from nerfstudio.models.splatfacto import SplatfactoModelConfig, SplatfactoModel, get_viewmat,total_variation_loss,color_correct
-from gsplat.strategy import DefaultStrategy,MCMCStrategy
+from nerfstudio.models.splatfacto import SplatfactoModelConfig, SplatfactoModel, get_viewmat, total_variation_loss, \
+    color_correct
+from gsplat.strategy import DefaultStrategy, MCMCStrategy
 
 try:
     from gsplat.rendering import rasterization
 except ImportError:
     print("Please install gsplat>=1.0.0")
+
 
 @dataclass
 class SatelliteSplatModelConfig(SplatfactoModelConfig):
@@ -30,7 +32,7 @@ class SatelliteSplatModelConfig(SplatfactoModelConfig):
     densify_grad_thresh: float = 0.0001
     refine_every: int = 500
     stop_split_at: int = 10000
-    output_depth_during_training:int = True
+    output_depth_during_training: int = True
 
 
 class SatelliteSplatModel(SplatfactoModel):
@@ -40,6 +42,13 @@ class SatelliteSplatModel(SplatfactoModel):
 
     def populate_modules(self):
         super().populate_modules()
+        if self.seed_points and self.config.random_init:
+            pcd_center = self.scene_box.get_center()
+            aabb = self.scene_box.aabb
+            max_range = torch.max(torch.abs(aabb[1] - aabb[0]))
+            self.gauss_params["means"] = torch.nn.Parameter(
+                (torch.rand((self.config.num_random, 3), device=torch.device(0)) - 0.5) * max_range + pcd_center)
+
         # Strategy for GS densification
         self.strategy = DefaultStrategy(
             prune_opa=self.config.cull_alpha_thresh,
@@ -111,25 +120,29 @@ class SatelliteSplatModel(SplatfactoModel):
 
         if self.step > 5000:
             loss_transparent = (pred_accumulation * mask_not).mean()
-            loss_transparent *= (0.5 * min(1.0,(self.step-5000) / 1000))
+            loss_transparent *= (0.5 * min(1.0, (self.step - 5000) / 1000))
+        elif self.config.random_init:
+            loss_transparent = (pred_accumulation * mask_not).mean()
+            loss_transparent *= 0.5
         else:
             loss_transparent = 0
         loss_depth = - (mask_not * pred_depth).mean() * 0
         if self.config.use_scale_regularization and self.step % 10 == 0:
             scale_exp = torch.exp(self.scales)
             scale_reg = (
-                torch.maximum(
-                    scale_exp.amax(dim=-1) / scale_exp.amin(dim=-1),
-                    torch.tensor(self.config.max_gauss_ratio),
-                )
-                - self.config.max_gauss_ratio
+                    torch.maximum(
+                        scale_exp.amax(dim=-1) / scale_exp.amin(dim=-1),
+                        torch.tensor(self.config.max_gauss_ratio),
+                    )
+                    - self.config.max_gauss_ratio
             )
             scale_reg = 0.1 * scale_reg.mean()
         else:
             scale_reg = torch.tensor(0.0).to(self.device)
 
         loss_dict = {
-            "main_loss": (1 - self.config.ssim_lambda) * Ll1 + self.config.ssim_lambda * simloss + loss_transparent + loss_depth,
+            "main_loss": (
+                                 1 - self.config.ssim_lambda) * Ll1 + self.config.ssim_lambda * simloss + loss_transparent + loss_depth,
             "scale_reg": scale_reg,
         }
 
@@ -164,9 +177,9 @@ class SatelliteSplatModel(SplatfactoModel):
         else:
             optimized_camera_to_world = camera.camera_to_worlds
 
-        # cropping
-        if self.crop_box is not None and not self.training:
-            crop_ids = self.crop_box.within(self.means).squeeze()
+        # cropping out of scene_box
+        if self.scene_box is not None:
+            crop_ids = self.scene_box.within(self.means).squeeze()
             if crop_ids.sum() == 0:
                 return self.get_empty_outputs(
                     int(camera.width.item()), int(camera.height.item()), self.background_color

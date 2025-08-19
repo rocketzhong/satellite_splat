@@ -39,6 +39,7 @@ satellite_splat = MethodSpecification(
             model=SatelliteSplatModelConfig(
                 eval_num_rays_per_chunk=1 << 15,
                 background_color="black",
+                # random_init=True
             ),
         ),
         optimizers={
