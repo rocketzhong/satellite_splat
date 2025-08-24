@@ -17,7 +17,7 @@ from nerfstudio.models.splatfacto import SplatfactoModelConfig, SplatfactoModel,
 from gsplat.strategy import DefaultStrategy, MCMCStrategy
 
 try:
-    from gsplat.rendering import rasterization
+    from gsplat.rendering import rasterization, rasterization_2dgs
 except ImportError:
     print("Please install gsplat>=1.0.0")
 
@@ -238,6 +238,7 @@ class SatelliteSplatModel(SplatfactoModel):
             sh_degree_to_use = None
 
         render, alpha, self.info = rasterization(
+            # render, alpha, normals, surf_normals, distort, median_depth, self.info = rasterization_2dgs(
             means=means_crop,
             quats=quats_crop,  # rasterization does normalization internally
             scales=torch.exp(scales_crop),
@@ -254,7 +255,7 @@ class SatelliteSplatModel(SplatfactoModel):
             sh_degree=sh_degree_to_use,
             sparse_grad=False,
             absgrad=self.strategy.absgrad,
-            rasterize_mode=self.config.rasterize_mode,
+            # rasterize_mode=self.config.rasterize_mode,
             # set some threshold to disregrad small gaussians for faster rendering.
             # radius_clip=3.0,
         )

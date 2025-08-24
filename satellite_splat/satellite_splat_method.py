@@ -80,7 +80,7 @@ satellite_splat = MethodSpecification(
             num_rays_per_chunk=1 << 15,
             websocket_port=7007
         ),
-        vis="viewer_legacy",
+        vis="viewer",
     ),
     description="Satellite Splat following Nerfstudio method template.",
 )
