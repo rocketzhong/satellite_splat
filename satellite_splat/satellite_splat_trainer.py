@@ -17,8 +17,8 @@ from nerfstudio.utils import profiler, writer
 from nerfstudio.utils.misc import step_check
 from nerfstudio.utils.writer import EventName, TimeWriter
 
-
-from satellite_splat.satellite_splat_pipeline import SatelliteSplatPipelineConfig,SatelliteSplatPipeline
+from satellite_splat.satellite_splat_pipeline import SatelliteSplatPipelineConfig, SatelliteSplatPipeline
+from satellite_splat.satellite_splat_viewer import SatelliteSplatViewer
 
 
 @dataclass
@@ -35,6 +35,7 @@ class SatelliteSplatTrainer(Trainer):
     """Satellite Splat Trainer class"""
     config: SatelliteSplatTrainerConfig
     pipeline: SatelliteSplatPipeline
+
     def setup(self, test_mode: Literal["test", "val", "inference"] = "val") -> None:
         """Setup the Trainer by calling other setup functions.
 
@@ -73,7 +74,7 @@ class SatelliteSplatTrainer(Trainer):
             datapath = self.config.data
             if datapath is None:
                 datapath = self.base_dir
-            self.viewer_state = ViewerState(
+            self.viewer_state = SatelliteSplatViewer(
                 self.config.viewer,
                 log_filename=viewer_log_path,
                 datapath=datapath,
@@ -108,7 +109,6 @@ class SatelliteSplatTrainer(Trainer):
         )
         writer.put_config(name="config", config_dict=dataclasses.asdict(self.config), step=0)
         profiler.setup_profiler(self.config.logging, writer_log_path)
-
 
     def train(self) -> None:
         """Train the model."""
@@ -156,8 +156,8 @@ class SatelliteSplatTrainer(Trainer):
                     writer.put_time(
                         name=EventName.TRAIN_RAYS_PER_SEC,
                         duration=self.world_size
-                        * self.pipeline.datamanager.get_train_rays_per_batch()
-                        / max(0.001, train_t.duration),
+                                 * self.pipeline.datamanager.get_train_rays_per_batch()
+                                 / max(0.001, train_t.duration),
                         step=step,
                         avg_over_steps=True,
                     )
@@ -175,7 +175,7 @@ class SatelliteSplatTrainer(Trainer):
                     # (https://pytorch.org/docs/stable/notes/cuda.html#cuda-memory-management)
                     # for more details about GPU memory management.
                     writer.put_scalar(
-                        name="GPU Memory (MB)", scalar=torch.cuda.max_memory_allocated() / (1024**2), step=step
+                        name="GPU Memory (MB)", scalar=torch.cuda.max_memory_allocated() / (1024 ** 2), step=step
                     )
 
                 # Do not perform evaluation if there are no validation images
